@@ -11,7 +11,7 @@ import type { UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
-import type { AuthResponse, JwtPayload } from '@via/shared-types';
+import type { AuthResponse, JwtPayload } from '../common/shared-types';
 
 /**
  * AuthService

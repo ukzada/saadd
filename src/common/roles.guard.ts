@@ -7,7 +7,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../auth/decorators/roles.decorator';
 import type { User } from '@prisma/client';
-import type { UserRole } from '@via/shared-types';
+import type { UserRole } from './shared-types';
 
 const PRISMA_TO_SHARED: Record<string, UserRole> = {
   HotelOwner: 'hotel_owner',

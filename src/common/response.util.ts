@@ -2,7 +2,7 @@ import {
   ApiError,
   ApiResponse,
   PaginationMeta,
-} from '@via/shared-types';
+} from './shared-types';
 
 /**
  * Build a standard success response.
