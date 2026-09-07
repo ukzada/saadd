@@ -1,81 +1,102 @@
-# Via Trips — Monorepo Setup
+# Via Trips API
 
-A bilingual (Arabic/English, RTL-aware) travel provider panel with a NestJS backend and Next.js frontend.
+NestJS backend for **Via Trips** — a bilingual (Arabic/English) travel marketplace where
+hotel owners list hotels & rooms and bundle creators publish day-by-day travel bundles.
 
-## Structure
+Built with **NestJS 10 · Prisma 6 · PostgreSQL · JWT (mock) auth · Vercel serverless-ready**.
+
+## Project structure
 
 ```
-/home/z/my-project/
-├── apps/
-│   └── api/                    # NestJS backend (port 3001)
-│       ├── prisma/schema.prisma
-│       ├── src/
-│       │   ├── main.ts
-│       │   ├── app.module.ts
-│       │   ├── auth/            # mock JWT auth + FirebaseAuthGuard (swap point)
-│       │   ├── hotels/          # CRUD /hotels
-│       │   ├── rooms/           # CRUD /hotels/:hotelId/rooms
-│       │   ├── bundles/         # CRUD /bundles (with day-by-day itinerary)
-│       │   ├── kyc/             # KYC status + document upload + submit
-│       │   ├── users/           # /user/profile
-│       │   ├── bookings/        # placeholder
-│       │   ├── prisma/          # PrismaService
-│       │   └── common/          # GlobalExceptionFilter, RolesGuard
-│       └── .env                 # DATABASE_URL, JWT_SECRET, MOCK_AUTH=true
-├── packages/
-│   └── shared-types/            # @via/shared-types — TypeScript types shared by both apps
-└── src/                         # Next.js frontend (port 3000)
-    ├── lib/api.ts               # fetch wrapper with Bearer token + 401 handling
-    ├── lib/store.ts             # Zustand store (token, user, login/register/logout)
-    ├── services/                # auth/hotel/room/bundle/kyc/user service files
-    └── components/
-        ├── auth/                # login-form, register-form (API-driven)
-        ├── hotel-owner/         # ho-hotels, ho-hotel-wizard, ho-rooms, ho-kyc, ho-profile
-        └── bundle-creator/      # bc-bundles, bc-bundle-wizard
+├── api/
+│   └── index.js                # Vercel serverless function entry (cached cold-start)
+├── prisma/
+│   ├── schema.prisma           # Prisma schema (postgresql)
+│   └── schema.postgres.prisma  # variant
+├── src/
+│   ├── main.ts                 # local dev entry (long-running server, port 3001)
+│   ├── serverless.ts           # Vercel entry (Express adapter, no listen)
+│   ├── app.module.ts
+│   ├── auth/                   # JWT auth (mock mode) + FirebaseAuthGuard swap point
+│   ├── hotels/ rooms/ bundles/ # core CRUD modules
+│   ├── kyc/                    # KYC status + document upload (multer)
+│   ├── users/ bookings/ subscriptions/
+│   ├── public/                 # public endpoints for mobile apps (no auth)
+│   ├── common/                 # GlobalExceptionFilter, RolesGuard, shared-types
+│   └── prisma/                 # PrismaService
+├── vercel.json                 # build command + rewrite all traffic -> /api/index
+└── .env.example                # copy to .env for local development
 ```
 
-## Quick start
+## Local development
 
-### 1. Database
-Start a PostgreSQL server on `localhost:5432` with database `via` and user `via` (password `via`).
-Adjust `apps/api/.env` if your connection differs.
-
-### 2. Backend
 ```bash
-cd apps/api
-bun install
-bunx prisma generate
-bunx prisma db push    # creates all tables
-bun run dev            # starts NestJS on http://localhost:3001
+# 1. Install dependencies
+npm install
+
+# 2. Configure environment
+cp .env.example .env            # then edit DATABASE_URL etc.
+
+# 3. Create database tables
+npx prisma generate
+npx prisma db push
+
+# 4. Run (http://localhost:3001/v1)
+npm run dev
 ```
 
-### 3. Frontend
-From the project root:
-```bash
-bun install
-bun run dev            # starts Next.js on http://localhost:3000
-```
+Requires a PostgreSQL server reachable at your `DATABASE_URL`
+(a `docker-compose.yml` with a local Postgres is included).
+
+## Environment variables
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `DATABASE_URL` | ✅ | — | PostgreSQL connection string |
+| `JWT_SECRET` | ✅ (prod) | — | Secret used to sign JWTs — use a long random string |
+| `JWT_EXPIRES_IN` | — | `7d` | Token lifetime |
+| `MOCK_AUTH` | — | `true` | `true` = local JWT auth; `false` = verify Firebase ID tokens |
+| `CORS_ORIGINS` | — | `http://localhost:3000` | Comma-separated allowed origins |
+| `API_PREFIX` | — | `v1` | Global route prefix |
+| `PORT` | — | `3001` | Local dev port only (Vercel manages its own) |
+| `UPLOAD_DIR` | — | `./uploads` | Local upload folder for KYC documents |
+| `SEED_DEMO_ACCOUNTS` | — | `true` | Seeds demo users on boot (mock auth only) |
+
+## Deploying to Vercel
+
+The repo is preconfigured for Vercel: `vercel.json` builds with
+`prisma generate && nest build` and rewrites all traffic to the serverless
+function in `api/index.js`. No framework preset needed.
+
+1. Import `ukzada/saadd` in Vercel.
+2. Add environment variables (Production + Preview):
+   `DATABASE_URL` (hosted Postgres — e.g. [Neon](https://neon.tech)),
+   `JWT_SECRET`, `CORS_ORIGINS`, `MOCK_AUTH=true`.
+3. Create the tables once, from your machine:
+   ```bash
+   DATABASE_URL="your-neon-url" npx prisma db push
+   ```
+4. Redeploy and check:
+   - `GET /` → API status JSON
+   - `GET /v1/public/hotels` → public hotel list
+
+> Note: serverless functions have an ephemeral filesystem — KYC file uploads
+> (multer, `UPLOAD_DIR`) should be moved to S3/Cloudinary for production.
 
 ## Mock auth (dev mode)
 
-`MOCK_AUTH=true` in `apps/api/.env`. The backend accepts any email + password (≥6 chars).
-Demo accounts that auto-fill the correct role:
-- `test@hotel.com` / `password` → hotel_owner
-- `test@bundle.com` / `password` → bundle_creator
-- `admin@via.com` / `password` → admin
+With `MOCK_AUTH=true` the backend accepts any email + password (≥6 chars);
+unknown emails are auto-created on first login. Demo accounts seeded on boot:
 
-Unknown emails are auto-created on first login.
+| Email | Password | Role |
+|---|---|---|
+| `hotel@viatrips.com` | `password123` | HotelOwner |
+| `bundle@viatrips.com` | `password123` | BundleCreator |
+| `test@hotel.com` | `password` | HotelOwner |
+| `test@bundle.com` | `password` | BundleCreator |
+| `admin@via.com` | `password` | Admin |
 
-## Firebase swap (later)
-
-When you're ready to switch to real Firebase ID token verification:
-
-1. Install `firebase-admin` in `apps/api`.
-2. Initialise the admin app in `apps/api/src/main.ts` using `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` from `.env`.
-3. In `apps/api/src/auth/firebase-auth.guard.ts`, replace the body of `verifyFirebaseToken()` with `admin.auth().verifyIdToken(token)` and look up the user by `firebaseUid`.
-4. Set `MOCK_AUTH=false` in `.env`.
-
-The frontend code does NOT need to change — the JWT token is sent in the `Authorization: Bearer` header regardless of which mode the backend is in.
+Login/register return `{ token, user }` — send it as `Authorization: Bearer <token>`.
 
 ## API endpoints (all under `/v1`)
 
@@ -86,6 +107,8 @@ The frontend code does NOT need to change — the JWT token is sent in the `Auth
 | GET | `/auth/me` | Bearer | — |
 | GET | `/user/profile` | Bearer | — |
 | PATCH | `/user/profile` | Bearer | — |
+| GET | `/public/hotels` · `/public/hotels/:id` | — | — |
+| GET | `/public/bundles` · `/public/bundles/:id` | — | — |
 | GET | `/hotels` | Bearer | — |
 | POST | `/hotels` | Bearer | hotel_owner, admin |
 | GET/PATCH/DELETE | `/hotels/:id` | Bearer | owner |
@@ -99,8 +122,16 @@ The frontend code does NOT need to change — the JWT token is sent in the `Auth
 | POST | `/kyc/documents` | Bearer (multipart) | — |
 | POST | `/kyc/submit` | Bearer | — |
 
-## Notes
-- File uploads (KYC docs, hotel/bundle images) are stored locally in `apps/api/uploads/` for now. The frontend currently sends image URLs (paste-into-input) for hotels/bundles; the KYC screen uses real multipart file upload.
-- The Next.js app's old `src/lib/db.ts` (legacy SQLite Prisma) is unused — the app now calls the API exclusively.
-- All responses use the standard `ApiResponse<T>` shape: `{ success, data?, message?, errors?, pagination? }`.
-# via
+All responses use the standard `ApiResponse<T>` shape:
+`{ success, data?, message?, errors?, meta? }`.
+
+## Firebase swap (later)
+
+1. Install `firebase-admin`.
+2. Initialise the admin app in `src/main.ts` using `FIREBASE_PROJECT_ID`,
+   `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`.
+3. In `src/auth/firebase-auth.guard.ts`, replace `verifyFirebaseToken()` with
+   `admin.auth().verifyIdToken(token)` and look up the user by `firebaseUid`.
+4. Set `MOCK_AUTH=false`.
+
+Clients keep sending the same `Authorization: Bearer` header — no client changes needed.
