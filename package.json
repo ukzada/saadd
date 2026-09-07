@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "postinstall": "prisma generate"
   },
   "clean:demo": "ts-node ./scripts/cleanup-demo.ts",
   "dependencies": {

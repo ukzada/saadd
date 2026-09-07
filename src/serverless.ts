@@ -17,6 +17,21 @@ import { AppModule } from './app.module';
 
 export async function bootstrapServerless() {
   const logger = new Logger('ServerlessBootstrap');
+
+  // Fail-fast visibility for the most common Vercel misconfigurations.
+  // DATABASE_URL: PrismaService logs the authoritative error, but a crash
+  // before Nest is created would hide it - warn here as well.
+  if (!process.env.DATABASE_URL) {
+    logger.error(
+      'DATABASE_URL is missing! Add it in Vercel -> Settings -> Environment Variables, then redeploy.',
+    );
+  }
+  if (!process.env.JWT_SECRET) {
+    logger.warn(
+      'JWT_SECRET is not set - authenticated endpoints (login, Bearer routes) will fail until it is provided.',
+    );
+  }
+
   const expressApp = new ExpressAdapter();
   const app = await NestFactory.create(AppModule, expressApp, {
     bufferLogs: true,

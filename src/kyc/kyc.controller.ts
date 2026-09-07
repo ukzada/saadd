@@ -10,6 +10,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
+import { mkdirSync } from 'fs';
 import { ConfigService } from '@nestjs/config';
 import { KycService } from './kyc.service';
 import { FirebaseAuthGuard } from '../auth/firebase-auth.guard';
@@ -37,8 +38,19 @@ export class KycController {
     FileInterceptor('file', {
       storage: diskStorage({
         destination: (_req, _file, cb) => {
-          const dir = process.env.UPLOAD_DIR || './uploads';
-          cb(null, dir);
+          // Vercel's filesystem is read-only except /tmp, and /tmp is
+          // ephemeral. Local dev keeps ./uploads; serverless isolates
+          // temp files under /tmp so a failed write can never take the
+          // whole function down.
+          const dir =
+            process.env.UPLOAD_DIR ||
+            (process.env.VERCEL ? '/tmp/uploads' : './uploads');
+          try {
+            mkdirSync(dir, { recursive: true });
+            cb(null, dir);
+          } catch (err) {
+            cb(err as Error, dir);
+          }
         },
         filename: (_req, file, cb) => {
           const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
